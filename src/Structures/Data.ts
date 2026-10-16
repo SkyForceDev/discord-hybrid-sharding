@@ -7,9 +7,10 @@ export function getInfo() {
     let data: ClusterClientData;
 
     if (clusterMode === 'process') {
-        const shardList: number[] = [];
-        const parseShardList = process.env?.SHARD_LIST?.split(',') || [];
-        parseShardList.forEach(c => shardList.push(Number(c)));
+        const rawShardList = process.env?.SHARD_LIST?.trim();
+        const shardList: number[] = rawShardList && rawShardList.length > 0
+            ? rawShardList.split(',').filter(c => c.trim().length > 0).map(c => Number(c))
+            : [];
         data = {
             SHARD_LIST: shardList,
             TOTAL_SHARDS: Number(process.env.TOTAL_SHARDS),

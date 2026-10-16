@@ -1,11 +1,16 @@
 {
-    "name": "discord-hybrid-sharding",
-    "version": "3.0.1",
-    "description": "The first package which combines sharding manager & internal sharding to save a lot of resources, which allows clustering!",
+    "name": "@skyforce/discord-hybrid-sharding",
+    "version": "3.1.0",
+    "description": "Maintained and hardened fork of discord-hybrid-sharding: combines cluster manager & internal sharding with distributed resilience, BigInt IPC, and Node 20/22+ optimizations.",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
     "scripts": {
-        "build": "npx tsc",
+        "build": "tsc",
+        "prepublishOnly": "npm run build",
+        "test": "jest",
         "lint": "eslint src/**/**.ts",
         "lint:fix": "eslint src/**/**.ts --fix",
         "format": "prettier --check .",
@@ -14,7 +19,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/meister03/discord-hybrid-sharding.git"
+        "url": "git+https://github.com/SkyForceDev/discord-hybrid-sharding.git"
     },
     "publishConfig": {
         "access": "public"
@@ -32,14 +37,26 @@
         "bot",
         "bots",
         "cluster",
-        "framework"
+        "framework",
+        "skyforce"
     ],
-    "author": "meister03",
+    "author": "SkyForce (https://github.com/SkyForceDev)",
+    "contributors": [
+        "meister03"
+    ],
     "license": "MIT",
     "bugs": {
-        "url": "https://github.com/meister03/discord-hybrid-sharding/issues"
+        "url": "https://github.com/SkyForceDev/discord-hybrid-sharding/issues"
     },
-    "homepage": "https://github.com/meister03/discord-hybrid-sharding#readme",
+    "homepage": "https://github.com/SkyForceDev/discord-hybrid-sharding#readme",
+    "peerDependencies": {
+        "discord.js": "^14.0.0 || ^15.0.0-dev"
+    },
+    "peerDependenciesMeta": {
+        "discord.js": {
+            "optional": true
+        }
+    },
     "devDependencies": {
         "@types/jest": "^29.5.12",
         "@types/node": "^20.12.2",

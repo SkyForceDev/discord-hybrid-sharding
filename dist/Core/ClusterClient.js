@@ -73,24 +73,36 @@ class ClusterClient extends events_1.default {
     }
     /**
      * Array of shard IDs of this client
-     * @deprecated use client.cluster.shards for getting a collecton of ws shards or client.cluster.shardList for an array of ids
+     * @deprecated use client.cluster.shards for getting a collection of ws shards or client.cluster.shardList for an array of ids
      */
     get ids() {
         const client = this.client;
-        // Not djs client
-        if (!client.ws)
-            return this.info.SHARD_LIST;
-        return client.ws.shards;
+        // Modern or decoupled gateway structure
+        if (client?.ws?.shards)
+            return client.ws.shards;
+        if (client?.gateway?.shards)
+            return client.gateway.shards;
+        return this.info.SHARD_LIST;
     }
     /**
-     *
+     * Gateway websocket shards belonging to this client or fallback shard list
      */
     get shards() {
         const client = this.client;
-        if (!client.ws?.shards) {
-            throw new TypeError('Websocket shards property is missing on your Discord Client.');
+        // Classic Discord.js Client.ws.shards
+        if (client?.ws?.shards) {
+            return client.ws.shards;
         }
-        return client.ws.shards;
+        // Decoupled @discordjs/ws WebSocketManager on client
+        if (client?.gateway?.shards) {
+            return client.gateway.shards;
+        }
+        // Direct WebSocketManager (if client itself wraps or is a gateway manager)
+        if (client?.shards) {
+            return client.shards;
+        }
+        // Graceful fallback for non-monolithic / decoupled architectures
+        return this.info.SHARD_LIST;
     }
     /**
      * Total number of clusters

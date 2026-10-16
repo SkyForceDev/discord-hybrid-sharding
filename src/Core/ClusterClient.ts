@@ -9,7 +9,7 @@ import { BaseMessage, IPCMessage, RawMessage } from "../Structures/IPCMessage";
 import { PromiseHandler } from "../Structures/PromiseHandler";
 import { WorkerClient } from "../Structures/Worker";
 import {
-	Awaitable, ClusterClientEvents, DjsDiscordClient, evalOptions, Events, messageType, Serialized
+	Awaitable, ClusterClientEvents, DjsDiscordClient, evalOptions, SingleClusterEvalOptions, Events, messageType, Serialized
 } from "../types/shared";
 import { generateNonce } from "../Util/Util";
 
@@ -81,28 +81,41 @@ export class ClusterClient<DiscordClient = DjsDiscordClient> extends EventEmitte
 
     /**
      * Array of shard IDs of this client
-     * @deprecated use client.cluster.shards for getting a collecton of ws shards or client.cluster.shardList for an array of ids
+     * @deprecated use client.cluster.shards for getting a collection of ws shards or client.cluster.shardList for an array of ids
      */
     public get ids() {
-        const client = this.client as DjsDiscordClient;
+        const client = this.client as any;
 
-        // Not djs client
-        if (!client.ws) return this.info.SHARD_LIST;
+        // Modern or decoupled gateway structure
+        if (client?.ws?.shards) return client.ws.shards;
+        if (client?.gateway?.shards) return client.gateway.shards;
 
-        return client.ws.shards;
+        return this.info.SHARD_LIST;
     }
 
     /**
-     *
+     * Gateway websocket shards belonging to this client or fallback shard list
      */
     public get shards() {
-        const client = this.client as DjsDiscordClient;
+        const client = this.client as any;
 
-        if (!client.ws?.shards) {
-            throw new TypeError('Websocket shards property is missing on your Discord Client.');
+        // Classic Discord.js Client.ws.shards
+        if (client?.ws?.shards) {
+            return client.ws.shards;
         }
 
-        return client.ws.shards;
+        // Decoupled @discordjs/ws WebSocketManager on client
+        if (client?.gateway?.shards) {
+            return client.gateway.shards;
+        }
+
+        // Direct WebSocketManager (if client itself wraps or is a gateway manager)
+        if (client?.shards) {
+            return client.shards;
+        }
+
+        // Graceful fallback for non-monolithic / decoupled architectures
+        return this.info.SHARD_LIST;
     }
 
     /**
@@ -164,23 +177,26 @@ export class ClusterClient<DiscordClient = DjsDiscordClient> extends EventEmitte
      *   .catch(console.error);
      * @see {@link ClusterManager#broadcastEval}
      */
-    public broadcastEval(script: string): Promise<any[]>;
-    public broadcastEval(script: string, options?: evalOptions): Promise<any>;
-    public broadcastEval<T>(fn: (client: DiscordClient) => Awaitable<T>): Promise<Serialized<T>[]>;
-    public broadcastEval<T>(
-        fn: (client: DiscordClient) => Awaitable<T>,
-        options?: { cluster?: number; timeout?: number },
+    public broadcastEval<T = any>(script: string, options: SingleClusterEvalOptions): Promise<T>;
+    public broadcastEval<T = any>(script: string, options?: evalOptions): Promise<T[]>;
+    public broadcastEval<T, P>(
+        fn: (client: DiscordClient, context: P) => Awaitable<T>,
+        options: SingleClusterEvalOptions<P>,
     ): Promise<Serialized<T>>;
     public broadcastEval<T, P>(
-        fn: (client: DiscordClient, context: Serialized<P>) => Awaitable<T>,
+        fn: (client: DiscordClient, context: P) => Awaitable<T>,
         options?: evalOptions<P>,
     ): Promise<Serialized<T>[]>;
-    public broadcastEval<T, P>(
-        fn: (client: DiscordClient, context: Serialized<P>) => Awaitable<T>,
-        options?: evalOptions<P>,
+    public broadcastEval<T>(
+        fn: (client: DiscordClient) => Awaitable<T>,
+        options: { cluster: number; timeout?: number },
     ): Promise<Serialized<T>>;
+    public broadcastEval<T>(
+        fn: (client: DiscordClient) => Awaitable<T>,
+        options?: { cluster?: number | number[]; timeout?: number },
+    ): Promise<Serialized<T>[]>;
     public async broadcastEval<T, P>(
-        script: string | ((client: DiscordClient, context?: Serialized<P>) => Awaitable<T> | Promise<Serialized<T>>),
+        script: string | ((client: DiscordClient, context?: P) => Awaitable<T> | Promise<Serialized<T>>),
         options?: evalOptions | evalOptions<P>,
     ) {
         if (!script || (typeof script !== 'string' && typeof script !== 'function'))

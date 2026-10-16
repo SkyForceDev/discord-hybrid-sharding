@@ -8,7 +8,7 @@ import { ClusterManagerHooks } from "../Structures/ManagerHooks";
 import { PromiseHandler } from "../Structures/PromiseHandler";
 import { Queue } from "../Structures/Queue";
 import { WorkerThreadOptions } from "../Structures/Worker";
-import { Awaitable, ClusterManagerEvents, ClusterManagerOptions, ClusterManagerSpawnOptions, ClusterRestartOptions, DjsDiscordClient, evalOptions, Plugin, Serialized } from "../types/shared";
+import { Awaitable, ClusterManagerEvents, ClusterManagerOptions, ClusterManagerSpawnOptions, ClusterRestartOptions, DjsDiscordClient, evalOptions, SingleClusterEvalOptions, Plugin, Serialized } from "../types/shared";
 import { Cluster } from "./Cluster";
 export declare class ClusterManager extends EventEmitter {
     /**
@@ -101,15 +101,18 @@ export declare class ClusterManager extends EventEmitter {
      * Evaluates a script on all clusters, or a given cluster, in the context of the {@link DjsDiscordClient}s.
      * @returns Results of the script execution
      */
-    broadcastEval(script: string): Promise<any[]>;
-    broadcastEval(script: string, options?: evalOptions): Promise<any>;
-    broadcastEval<T>(fn: (client: DjsDiscordClient) => Awaitable<T>): Promise<Serialized<T>[]>;
-    broadcastEval<T>(fn: (client: DjsDiscordClient) => Awaitable<T>, options?: {
-        cluster?: number;
+    broadcastEval<T = any>(script: string, options: SingleClusterEvalOptions): Promise<T>;
+    broadcastEval<T = any>(script: string, options?: evalOptions): Promise<T[]>;
+    broadcastEval<T, P>(fn: (client: DjsDiscordClient, context: P) => Awaitable<T>, options: SingleClusterEvalOptions<P>): Promise<Serialized<T>>;
+    broadcastEval<T, P>(fn: (client: DjsDiscordClient, context: P) => Awaitable<T>, options: evalOptions<P>): Promise<Serialized<T>[]>;
+    broadcastEval<T>(fn: (client: DjsDiscordClient) => Awaitable<T>, options: {
+        cluster: number;
         timeout?: number;
     }): Promise<Serialized<T>>;
-    broadcastEval<T, P>(fn: (client: DjsDiscordClient, context: Serialized<P>) => Awaitable<T>, options?: evalOptions<P>): Promise<Serialized<T>[]>;
-    broadcastEval<T, P>(fn: (client: DjsDiscordClient, context: Serialized<P>) => Awaitable<T>, options?: evalOptions<P>): Promise<Serialized<T>>;
+    broadcastEval<T>(fn: (client: DjsDiscordClient) => Awaitable<T>, options?: {
+        cluster?: number | number[];
+        timeout?: number;
+    }): Promise<Serialized<T>[]>;
     /**
      * Fetches a client property value of each cluster, or a given cluster.
      * @param prop Name of the client property to get, using periods for nesting
@@ -119,7 +122,7 @@ export declare class ClusterManager extends EventEmitter {
      *   .then(results => console.log(`${results.reduce((prev, val) => prev + val, 0)} total guilds`))
      *   .catch(console.error);
      */
-    fetchClientValues(prop: string, cluster?: number): Promise<any>;
+    fetchClientValues(prop: string, cluster?: number): Promise<any[]>;
     /**
      * Runs a method with given arguments on all clusters, or a given cluster.
      * @param method Method name to run on each cluster

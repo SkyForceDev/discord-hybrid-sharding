@@ -65,6 +65,7 @@ export declare class Cluster extends EventEmitter {
      * Whether the cluster's {@link DjsDiscordClient} is ready
      */
     ready: boolean;
+    private isRespawning;
     /**
      * @param manager Manager that is creating this cluster
      * @param id ID of this cluster
@@ -89,7 +90,7 @@ export declare class Cluster extends EventEmitter {
      * Kills and restarts the cluster's process/worker.
      * @param options Options for respawning the cluster
      */
-    respawn({ delay, timeout }?: import("../types/shared").ClusterManagerSpawnOptions): Promise<import("child_process").ChildProcess | import("worker_threads").Worker | null>;
+    respawn({ delay, timeout }?: import("../types/shared").ClusterManagerSpawnOptions): Promise<import("child_process").ChildProcess | import("worker_threads").Worker | null | undefined>;
     /**
      * Sends a message to the cluster's process/worker.
      * @param  message Message to send to the cluster
@@ -113,7 +114,7 @@ export declare class Cluster extends EventEmitter {
      * @param timeout
      * @returns Result of the script execution
      */
-    eval(script: string, context: any, timeout: number): Promise<unknown>;
+    eval(script: string, context?: any, timeout?: number): Promise<unknown>;
     /**
      * @param reason If maintenance should be enabled with a given reason or disabled when nonce provided
      */

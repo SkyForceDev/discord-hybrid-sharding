@@ -348,18 +348,23 @@ class ClusterManager extends events_1.default {
      * @returns Results of the method execution
      * @private
      */
-    _performOnClusters(method, args, cluster, timeout) {
+    async _performOnClusters(method, args, cluster, timeout) {
         if (this.clusters.size === 0)
             return Promise.reject(new Error('CLUSTERING_NO_CLUSTERS'));
         if (typeof cluster === 'number') {
-            if (this.clusters.has(cluster))
+            if (this.clusters.has(cluster)) {
                 return (this.clusters
                     .get(cluster)
                 // @ts-expect-error
                 ?.
                 // @ts-expect-error
                 [method](...args, undefined, timeout)
-                    .then((e) => [e]));
+                    .then((e) => [e])
+                    .catch((error) => {
+                    this._debug(`[PERFORM_ON_CLUSTERS] Cluster ${cluster} failed ${method}: ${error?.message || error}`, cluster);
+                    return [null];
+                }));
+            }
             return Promise.reject(new Error('CLUSTERING_CLUSTER_NOT_FOUND FOR ClusterId: ' + cluster));
         }
         let clusters = Array.from(this.clusters.values());
@@ -368,18 +373,24 @@ class ClusterManager extends events_1.default {
         if (clusters.length === 0)
             return Promise.reject(new Error('CLUSTERING_NO_CLUSTERS_FOUND'));
         /* if (this.clusters.size !== this.totalClusters && !cluster) return Promise.reject(new Error('CLUSTERING_IN_PROCESS')); */
-        const promises = [];
+        const results = await Promise.allSettled(
         // @ts-expect-error
-        for (const cl of clusters)
-            promises.push(cl[method](...args, undefined, timeout));
-        return Promise.all(promises);
+        clusters.map(cl => cl[method](...args, undefined, timeout)));
+        return results.map((result, index) => {
+            if (result.status === 'fulfilled') {
+                return result.value;
+            }
+            const cl = clusters[index];
+            this._debug(`[PERFORM_ON_CLUSTERS] Cluster ${cl?.id} failed ${method}: ${result.reason?.message || result.reason}`, cl?.id);
+            return null;
+        });
     }
     /**
      * Kills all running clusters and respawns them.
      * @param options Options for respawning shards
      */
     async respawnAll({ clusterDelay = (this.spawnOptions.delay = 5500), respawnDelay = (this.spawnOptions.delay = 5500), timeout = -1, } = {}) {
-        this.promise.nonce.clear();
+        this.promise.rejectAll('All clusters are being respawned');
         let s = 0;
         let i = 0;
         this._debug('Respawning all Clusters');

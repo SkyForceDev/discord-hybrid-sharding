@@ -2,8 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.messageType = exports.Endpoints = exports.DefaultOptions = exports.Events = void 0;
 exports.Events = {
-    ERROR: 'warn',
-    WARN: 'error',
+    ERROR: 'error',
+    WARN: 'warn',
 };
 exports.DefaultOptions = {
     http: {

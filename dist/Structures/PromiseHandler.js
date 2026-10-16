@@ -24,26 +24,57 @@ class PromiseHandler {
             }
         }
     }
-    async create(message, options) {
+    async create(message, options = {}) {
         if (!options)
             options = {};
         if (Object.keys(options).length === 0 && message.options)
             options = message.options;
         if (!message.nonce)
             message.nonce = (0, Util_1.generateNonce)();
+        const clusterId = options.clusterId ?? message.options?.clusterId;
+        const timeoutMs = typeof options.timeout === 'number' && options.timeout > 0 ? options.timeout : 30000;
         return await new Promise((resolve, reject) => {
-            if (options.timeout) {
-                const timeout = setTimeout(() => {
-                    this.nonce.delete(message.nonce);
-                    const error = new Error('Promise timed out');
-                    error.stack = message.stack || error.stack;
-                    reject(error);
-                }, options.timeout);
-                this.nonce.set(message.nonce, { resolve, reject, options, timeout });
-            }
-            else
-                this.nonce.set(message.nonce, { resolve, reject, options });
+            const timeout = setTimeout(() => {
+                this.nonce.delete(message.nonce);
+                const error = new Error(`IPC Request timed out after ${timeoutMs}ms (Cluster: ${clusterId ?? 'unknown'})`);
+                error.stack = message.stack || error.stack;
+                reject(error);
+            }, timeoutMs);
+            this.nonce.set(message.nonce, {
+                resolve,
+                reject,
+                options,
+                timeout,
+                clusterId,
+            });
         });
+    }
+    /**
+     * Rejects and deletes all pending promises for a deceased cluster
+     * @param clusterId The ID of the deceased cluster
+     * @param reason The reason for the rejection
+     */
+    rejectAllForCluster(clusterId, reason) {
+        for (const [nonce, item] of this.nonce.entries()) {
+            if (item.clusterId === clusterId) {
+                if (item.timeout)
+                    clearTimeout(item.timeout);
+                this.nonce.delete(nonce);
+                item.reject(new Error(`Cluster ${clusterId} died before replying: ${reason}`));
+            }
+        }
+    }
+    /**
+     * Rejects all pending promises before clearing the map
+     * @param reason The reason for cancelling all pending promises
+     */
+    rejectAll(reason) {
+        for (const item of this.nonce.values()) {
+            if (item.timeout)
+                clearTimeout(item.timeout);
+            item.reject(new Error(`Operation cancelled: ${reason}`));
+        }
+        this.nonce.clear();
     }
 }
 exports.PromiseHandler = PromiseHandler;

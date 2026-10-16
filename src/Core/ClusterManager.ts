@@ -14,7 +14,7 @@ import { Queue } from "../Structures/Queue";
 import { WorkerThreadOptions } from "../Structures/Worker";
 import {
 	Awaitable, ClusterManagerEvents, ClusterManagerOptions, ClusterManagerSpawnOptions,
-	ClusterRestartOptions, DjsDiscordClient, evalOptions, Plugin, QueueOptions, Serialized
+	ClusterRestartOptions, DjsDiscordClient, evalOptions, SingleClusterEvalOptions, Plugin, QueueOptions, Serialized
 } from "../types/shared";
 import {
 	chunkArray, delayFor, fetchRecommendedShards, makePlainError, shardIdForGuildId
@@ -357,23 +357,26 @@ export class ClusterManager extends EventEmitter {
      * Evaluates a script on all clusters, or a given cluster, in the context of the {@link DjsDiscordClient}s.
      * @returns Results of the script execution
      */
-    public broadcastEval(script: string): Promise<any[]>;
-    public broadcastEval(script: string, options?: evalOptions): Promise<any>;
-    public broadcastEval<T>(fn: (client: DjsDiscordClient) => Awaitable<T>): Promise<Serialized<T>[]>;
+    public broadcastEval<T = any>(script: string, options: SingleClusterEvalOptions): Promise<T>;
+    public broadcastEval<T = any>(script: string, options?: evalOptions): Promise<T[]>;
+    public broadcastEval<T, P>(
+        fn: (client: DjsDiscordClient, context: P) => Awaitable<T>,
+        options: SingleClusterEvalOptions<P>,
+    ): Promise<Serialized<T>>;
+    public broadcastEval<T, P>(
+        fn: (client: DjsDiscordClient, context: P) => Awaitable<T>,
+        options: evalOptions<P>,
+    ): Promise<Serialized<T>[]>;
     public broadcastEval<T>(
         fn: (client: DjsDiscordClient) => Awaitable<T>,
-        options?: { cluster?: number; timeout?: number },
+        options: { cluster: number; timeout?: number },
     ): Promise<Serialized<T>>;
-    public broadcastEval<T, P>(
-        fn: (client: DjsDiscordClient, context: Serialized<P>) => Awaitable<T>,
-        options?: evalOptions<P>,
+    public broadcastEval<T>(
+        fn: (client: DjsDiscordClient) => Awaitable<T>,
+        options?: { cluster?: number | number[]; timeout?: number },
     ): Promise<Serialized<T>[]>;
-    public broadcastEval<T, P>(
-        fn: (client: DjsDiscordClient, context: Serialized<P>) => Awaitable<T>,
-        options?: evalOptions<P>,
-    ): Promise<Serialized<T>>;
     public async broadcastEval<T, P>(
-        script: string | ((client: DjsDiscordClient, context?: Serialized<P>) => Awaitable<T> | Promise<Serialized<T>>),
+        script: string | ((client: DjsDiscordClient, context?: P) => Awaitable<T> | Promise<Serialized<T>>),
         evalOptions?: evalOptions | evalOptions<P>,
     ) {
         const options = evalOptions ?? {};
@@ -428,18 +431,26 @@ export class ClusterManager extends EventEmitter {
      * @returns Results of the method execution
      * @private
      */
-    private _performOnClusters(method: 'eval', args: any[], cluster?: number | number[], timeout?: number) {
+    private async _performOnClusters(method: 'eval', args: any[], cluster?: number | number[], timeout?: number) {
         if (this.clusters.size === 0) return Promise.reject(new Error('CLUSTERING_NO_CLUSTERS'));
 
         if (typeof cluster === 'number') {
-            if (this.clusters.has(cluster))
+            if (this.clusters.has(cluster)) {
                 return (
                     this.clusters
                         .get(cluster)
                         // @ts-expect-error
                         ?.[method](...args, undefined, timeout)
                         .then((e: any) => [e])
+                        .catch((error: any) => {
+                            this._debug(
+                                `[PERFORM_ON_CLUSTERS] Cluster ${cluster} failed ${method}: ${error?.message || error}`,
+                                cluster,
+                            );
+                            return [null];
+                        })
                 );
+            }
             return Promise.reject(new Error('CLUSTERING_CLUSTER_NOT_FOUND FOR ClusterId: ' + cluster));
         }
         let clusters = Array.from(this.clusters.values());
@@ -448,11 +459,22 @@ export class ClusterManager extends EventEmitter {
 
         /* if (this.clusters.size !== this.totalClusters && !cluster) return Promise.reject(new Error('CLUSTERING_IN_PROCESS')); */
 
-        const promises = [];
+        const results = await Promise.allSettled(
+            // @ts-expect-error
+            clusters.map(cl => cl[method](...args, undefined, timeout)),
+        );
 
-        // @ts-expect-error
-        for (const cl of clusters) promises.push(cl[method](...args, undefined, timeout));
-        return Promise.all(promises);
+        return results.map((result, index) => {
+            if (result.status === 'fulfilled') {
+                return result.value;
+            }
+            const cl = clusters[index];
+            this._debug(
+                `[PERFORM_ON_CLUSTERS] Cluster ${cl?.id} failed ${method}: ${result.reason?.message || result.reason}`,
+                cl?.id,
+            );
+            return null;
+        });
     }
 
     /**
@@ -464,7 +486,7 @@ export class ClusterManager extends EventEmitter {
         respawnDelay = (this.spawnOptions.delay = 5500),
         timeout = -1,
     } = {}) {
-        this.promise.nonce.clear();
+        this.promise.rejectAll('All clusters are being respawned');
         let s = 0;
         let i = 0;
         this._debug('Respawning all Clusters');

@@ -245,7 +245,7 @@ export class AutoResharderClusterClient {
 export class AutoResharderManager {
     public name: 'autoresharder';
     private manager?: ClusterManager;
-    // private clustersListening = new Set<number>();
+    private clustersListening = new Set<number>();
     public clusterDatas: AutoResharderSendData[] = [];
     public options: AutoResharderManagerOptions = {
         ShardsPerCluster: 'useManagerOption',
@@ -289,6 +289,13 @@ export class AutoResharderManager {
         };
     }
     build(manager: ClusterManager) {
+        process.emitWarning(
+            'AutoResharder is experimental and unmaintained. Dynamic resharding without standalone Gateway proxying (@discordjs/ws) can exceed Discord Gateway Identify rate limits and cause session invalidation.',
+            {
+                code: 'AUTORESHARDER_DEPRECATION_WARNING',
+                detail: 'Consider migrating to an independent Gateway layer for large-scale shard scaling.',
+            },
+        );
         manager[this.name] = this;
         this.manager = manager;
 
@@ -407,33 +414,24 @@ export class AutoResharderManager {
     }
     private initialize() {
         if (!this.manager) throw new Error('Manager is missing on AutoResharderManager');
-        // try {
-        //     this.manager.on('clusterCreate', cluster => {
-        //         if (this.clustersListening.has(cluster.id)) {
-        //             return;
-        //         }
-        //         this.clustersListening.add(cluster.id);
-        //         cluster.on('message', message => {
-        //             if (typeof message !== 'object') return;
+        try {
+            this.manager.on('clusterCreate', cluster => {
+                if (this.clustersListening.has(cluster.id)) {
+                    return;
+                }
+                this.clustersListening.add(cluster.id);
+                cluster.on('message', message => {
+                    if (typeof message !== 'object' || !message) return;
 
-        //             const msg = ('raw' in message ? message.raw : message) as sendDataMessage;
-        //             if (msg._type !== messageType.CLIENT_AUTORESHARDER_SENDDATA) return;
+                    const msg = ('raw' in message ? message.raw : message) as sendDataMessage;
+                    if (msg._type !== messageType.CLIENT_AUTORESHARDER_SENDDATA) return;
 
-        //             const index = this.clusterDatas.findIndex(v => v && v.v.clusterId === msg.data.clusterId);
-        //             if (index < 0) this.clusterDatas.push(msg.data);
-        //             else this.clusterDatas[index] = msg.data;
-
-        //             if (this.options.debug === true)
-        //                 console.debug(
-        //                     `MANAGER-AUTORESHARDER :: Reached sendData of Cluster #${cluster.id} for:`,
-        //                     msg.data,
-        //                 );
-        //             this.checkReCluster();
-        //         });
-        //     });
-        // } catch (e) {
-        //     console.error(e);
-        // }
+                    this.getData(msg.data);
+                });
+            });
+        } catch (e) {
+            console.error(e);
+        }
     }
     private validate() {
         if (!this.manager) throw new Error('Manager is missing on AutoResharderManager');

@@ -5,7 +5,7 @@ import { ChildClient } from "../Structures/Child";
 import { RawMessage } from "../Structures/IPCMessage";
 import { PromiseHandler } from "../Structures/PromiseHandler";
 import { WorkerClient } from "../Structures/Worker";
-import { Awaitable, ClusterClientEvents, DjsDiscordClient, evalOptions, Serialized } from "../types/shared";
+import { Awaitable, ClusterClientEvents, DjsDiscordClient, evalOptions, SingleClusterEvalOptions, Serialized } from "../types/shared";
 export declare class ClusterClient<DiscordClient = DjsDiscordClient> extends EventEmitter {
     client: DiscordClient;
     mode: 'process' | 'worker';
@@ -25,13 +25,13 @@ export declare class ClusterClient<DiscordClient = DjsDiscordClient> extends Eve
     get id(): number;
     /**
      * Array of shard IDs of this client
-     * @deprecated use client.cluster.shards for getting a collecton of ws shards or client.cluster.shardList for an array of ids
+     * @deprecated use client.cluster.shards for getting a collection of ws shards or client.cluster.shardList for an array of ids
      */
-    get ids(): number[] | import("discord.js").Collection<number, import("discord.js").WebSocketShard>;
+    get ids(): any;
     /**
-     *
+     * Gateway websocket shards belonging to this client or fallback shard list
      */
-    get shards(): import("discord.js").Collection<number, import("discord.js").WebSocketShard>;
+    get shards(): any;
     /**
      * Total number of clusters
      */
@@ -53,7 +53,7 @@ export declare class ClusterClient<DiscordClient = DjsDiscordClient> extends Eve
      *   .catch(console.error);
      * @see {@link ClusterManager#fetchClientValues}
      */
-    fetchClientValues(prop: string, cluster?: number): Promise<any>;
+    fetchClientValues(prop: string, cluster?: number): Promise<any[]>;
     /**
      * Evaluates a script or function on the Cluster Manager
      * @example
@@ -74,15 +74,18 @@ export declare class ClusterClient<DiscordClient = DjsDiscordClient> extends Eve
      *   .catch(console.error);
      * @see {@link ClusterManager#broadcastEval}
      */
-    broadcastEval(script: string): Promise<any[]>;
-    broadcastEval(script: string, options?: evalOptions): Promise<any>;
-    broadcastEval<T>(fn: (client: DiscordClient) => Awaitable<T>): Promise<Serialized<T>[]>;
-    broadcastEval<T>(fn: (client: DiscordClient) => Awaitable<T>, options?: {
-        cluster?: number;
+    broadcastEval<T = any>(script: string, options: SingleClusterEvalOptions): Promise<T>;
+    broadcastEval<T = any>(script: string, options?: evalOptions): Promise<T[]>;
+    broadcastEval<T, P>(fn: (client: DiscordClient, context: P) => Awaitable<T>, options: SingleClusterEvalOptions<P>): Promise<Serialized<T>>;
+    broadcastEval<T, P>(fn: (client: DiscordClient, context: P) => Awaitable<T>, options?: evalOptions<P>): Promise<Serialized<T>[]>;
+    broadcastEval<T>(fn: (client: DiscordClient) => Awaitable<T>, options: {
+        cluster: number;
         timeout?: number;
     }): Promise<Serialized<T>>;
-    broadcastEval<T, P>(fn: (client: DiscordClient, context: Serialized<P>) => Awaitable<T>, options?: evalOptions<P>): Promise<Serialized<T>[]>;
-    broadcastEval<T, P>(fn: (client: DiscordClient, context: Serialized<P>) => Awaitable<T>, options?: evalOptions<P>): Promise<Serialized<T>>;
+    broadcastEval<T>(fn: (client: DiscordClient) => Awaitable<T>, options?: {
+        cluster?: number | number[];
+        timeout?: number;
+    }): Promise<Serialized<T>[]>;
     /**
      * Sends a Request to the ParentCluster and returns the reply
      * @example

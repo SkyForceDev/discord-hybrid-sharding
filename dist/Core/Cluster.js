@@ -58,6 +58,7 @@ class Cluster extends events_1.default {
      * Whether the cluster's {@link DjsDiscordClient} is ready
      */
     ready;
+    isRespawning = false;
     /**
      * @param manager Manager that is creating this cluster
      * @param id ID of this cluster
@@ -133,13 +134,11 @@ class Cluster extends events_1.default {
         this.emit('spawn', this.thread.process);
         await new Promise((resolve, reject) => {
             let spawnTimeoutTimer = undefined;
-            const cleanup = (death = false) => {
-                clearTimeout(spawnTimeoutTimer);
-                // Remove listeners if cluster died to prevent event emitter leaks
-                if (death) {
-                    this.off('ready', onReady);
-                    this.off('death', onDeath);
-                }
+            const cleanup = () => {
+                if (spawnTimeoutTimer)
+                    clearTimeout(spawnTimeoutTimer);
+                this.off('ready', onReady);
+                this.off('death', onDeath);
             };
             const onReady = () => {
                 this.manager.emit('clusterReady', this);
@@ -149,7 +148,7 @@ class Cluster extends events_1.default {
                 resolve('Cluster is ready');
             };
             const onDeath = () => {
-                cleanup(true);
+                cleanup();
                 reject(new Error('CLUSTERING_READY_DIED | ClusterId: ' + this.id));
             };
             const onTimeout = () => {
@@ -188,12 +187,22 @@ class Cluster extends events_1.default {
      * @param options Options for respawning the cluster
      */
     async respawn({ delay = 5500, timeout = -1 } = this.manager.spawnOptions) {
-        if (this.thread)
-            this.kill({ force: true });
-        if (delay > 0)
-            await (0, Util_1.delayFor)(delay);
-        this.manager.heartbeat?.clusters.get(this.id)?.stop();
-        return this.spawn(timeout);
+        if (this.isRespawning) {
+            this.manager._debug('[RESPAWN] Respawn already in progress, skipping duplicate call', this.id);
+            return;
+        }
+        this.isRespawning = true;
+        try {
+            if (this.thread)
+                this.kill({ force: true, reason: 'Respawning cluster' });
+            if (delay > 0)
+                await (0, Util_1.delayFor)(delay);
+            this.manager.heartbeat?.clusters.get(this.id)?.stop();
+            return await this.spawn(timeout);
+        }
+        finally {
+            this.isRespawning = false;
+        }
     }
     /**
      * Sends a message to the cluster's process/worker.
@@ -227,16 +236,17 @@ class Cluster extends events_1.default {
      * @param timeout
      * @returns Result of the script execution
      */
-    async eval(script, context, timeout) {
+    async eval(script, context, timeout = 30000) {
         // Stringify the script if it's a Function
         const _eval = typeof script === 'function' ? `(${script})(this, ${JSON.stringify(context)})` : script;
         // cluster is dead (maybe respawning), don't cache anything and error immediately
         if (!this.thread)
             return Promise.reject(new Error('CLUSTERING_NO_CHILD_EXISTS | ClusterId: ' + this.id));
         const nonce = (0, Util_1.generateNonce)();
-        const message = { nonce, _eval, options: { timeout }, _type: shared_1.messageType.CLIENT_EVAL_REQUEST };
+        const options = { timeout, clusterId: this.id };
+        const message = { nonce, _eval, options, _type: shared_1.messageType.CLIENT_EVAL_REQUEST };
         await this.send(message);
-        return await this.manager.promise.create(message, message.options);
+        return await this.manager.promise.create(message, options);
     }
     /**
      * @param reason If maintenance should be enabled with a given reason or disabled when nonce provided
@@ -282,21 +292,29 @@ class Cluster extends events_1.default {
          * @event Cluster#death
          * @param {Child|Worker} process Child process/worker that exited
          */
-        const respawn = this.manager.respawn;
+        // Reject all pending promises for this cluster immediately
+        this.manager.promise.rejectAllForCluster(this.id, `Cluster process exited with code ${exitCode}`);
         // Cleanup functions
         this.manager.heartbeat?.clusters.get(this.id)?.stop();
         this.restarts.cleanup();
         this.emit('death', this, this.thread?.process);
-        this.manager._debug('[DEATH] Cluster died, attempting respawn | Restarts Left: ' + (this.restarts.max - this.restarts.current), this.id);
         this.ready = false;
         this.thread = null;
+        // Abort auto-respawn if explicit respawn is in progress
+        if (this.isRespawning) {
+            this.manager._debug('[EXIT] Process exited during explicit respawn cycle', this.id);
+            return;
+        }
+        const respawn = this.manager.respawn;
         if (!respawn)
             return;
-        if (this.restarts.current >= this.restarts.max)
+        this.manager._debug('[DEATH] Cluster died, attempting respawn | Restarts Left: ' + (this.restarts.max - this.restarts.current), this.id);
+        if (this.restarts.current >= this.restarts.max) {
             this.manager._debug('[ATTEMPTED_RESPAWN] Attempted Respawn Declined | Max Restarts have been exceeded', this.id);
-        if (respawn && this.restarts.current < this.restarts.max)
-            this.spawn().catch(err => this.emit('error', err));
+            return;
+        }
         this.restarts.append();
+        this.spawn().catch(err => this.emit('error', err));
     }
     /**
      * Handles the cluster's process/worker error.

@@ -28,7 +28,7 @@ export class Child {
         if (options.execPath) this.processOptions.execPath = options.execPath;
         if (options.gid) this.processOptions.gid = options.gid;
 
-        if (options.serialization) this.processOptions.serialization = options.serialization;
+        this.processOptions.serialization = options.serialization ?? 'advanced';
         if (options.signal) this.processOptions.signal = options.signal;
         if (options.killSignal) this.processOptions.killSignal = options.killSignal;
         if (options.silent) this.processOptions.silent = options.silent;
@@ -57,10 +57,44 @@ export class Child {
 
     public send(message: Serializable) {
         return new Promise((resolve, reject) => {
-            this.process?.send(message, err => {
-                if (err) reject(err);
-                else resolve(this);
+            if (!this.process) return reject(new Error('Process does not exist'));
+            let drained = false;
+            let callbackFired = false;
+
+            const onDrain = () => {
+                drained = true;
+                if (callbackFired) {
+                    cleanup();
+                    resolve(this);
+                }
+            };
+
+            const cleanup = () => {
+                this.process?.off('drain', onDrain);
+                this.process?.off('disconnect', onDisconnect);
+            };
+
+            const onDisconnect = () => {
+                cleanup();
+                reject(new Error('IPC channel disconnected'));
+            };
+
+            const canSend = this.process.send(message, (err: Error | null) => {
+                callbackFired = true;
+                if (err) {
+                    cleanup();
+                    return reject(err);
+                }
+                if (drained || canSend !== false) {
+                    cleanup();
+                    resolve(this);
+                }
             });
+
+            if (canSend === false) {
+                this.process.once('drain', onDrain);
+                this.process.once('disconnect', onDisconnect);
+            }
         });
     }
 }
@@ -71,12 +105,46 @@ export class ChildClient {
         this.ipc = process;
     }
     public send(message: Serializable) {
-        const process = this.ipc;
+        const proc = this.ipc;
         return new Promise<void>((resolve, reject) => {
-            process.send?.(message, (err: Error) => {
-                if (err) reject(err);
-                else resolve();
+            if (!proc || !proc.send) return reject(new Error('Process IPC channel is not available'));
+            let drained = false;
+            let callbackFired = false;
+
+            const onDrain = () => {
+                drained = true;
+                if (callbackFired) {
+                    cleanup();
+                    resolve();
+                }
+            };
+
+            const cleanup = () => {
+                proc.off('drain', onDrain);
+                proc.off('disconnect', onDisconnect);
+            };
+
+            const onDisconnect = () => {
+                cleanup();
+                reject(new Error('IPC channel disconnected'));
+            };
+
+            const canSend = proc.send(message, (err: Error | null) => {
+                callbackFired = true;
+                if (err) {
+                    cleanup();
+                    return reject(err);
+                }
+                if (drained || canSend !== false) {
+                    cleanup();
+                    resolve();
+                }
             });
+
+            if (canSend === false) {
+                proc.once('drain', onDrain);
+                proc.once('disconnect', onDisconnect);
+            }
         });
     }
 

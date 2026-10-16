@@ -10,8 +10,8 @@ import { BaseMessage, IPCMessage } from "../Structures/IPCMessage";
 import { WorkerThreadOptions } from "../Structures/Worker";
 
 export const Events = {
-    ERROR: 'warn',
-    WARN: 'error',
+    ERROR: 'error',
+    WARN: 'warn',
 };
 
 export const DefaultOptions = {
@@ -51,7 +51,7 @@ export enum messageType {
     'CLIENT_AUTORESHARDER_SENDDATA',
 }
 
-export interface evalOptions<T = object> {
+export interface evalOptions<T = any> {
     cluster?: number | number[];
     shard?: number;
     guildId?: string;
@@ -60,11 +60,15 @@ export interface evalOptions<T = object> {
     _type?: messageType;
 }
 
+export interface SingleClusterEvalOptions<T = any> extends evalOptions<T> {
+    cluster: number;
+}
+
 export type Awaitable<T> = T | PromiseLike<T>;
 
-export type Serialized<T> = T extends symbol | bigint | (() => any)
+export type Serialized<T> = T extends symbol | (() => any)
     ? never
-    : T extends number | string | boolean | undefined
+    : T extends number | string | boolean | undefined | null | bigint
       ? T
       : T extends { toJSON(): infer R }
         ? R

@@ -46,9 +46,21 @@ class Worker {
         return this.process?.terminate();
     }
     send(message) {
-        return new Promise(resolve => {
-            this.process?.postMessage(message);
-            resolve(this);
+        return new Promise((resolve, reject) => {
+            if (!this.process)
+                return reject(new Error('Worker process does not exist'));
+            try {
+                const canSend = this.process.postMessage(message);
+                if (canSend === false) {
+                    this.process.once('drain', () => resolve(this));
+                }
+                else {
+                    resolve(this);
+                }
+            }
+            catch (err) {
+                reject(err);
+            }
         });
     }
 }
@@ -59,9 +71,21 @@ class WorkerClient {
         this.ipc = worker_threads_1.parentPort;
     }
     send(message) {
-        return new Promise(resolve => {
-            this.ipc?.postMessage(message);
-            resolve();
+        return new Promise((resolve, reject) => {
+            if (!this.ipc)
+                return reject(new Error('Parent port is not available'));
+            try {
+                const canSend = this.ipc.postMessage(message);
+                if (canSend === false) {
+                    this.ipc.once('drain', () => resolve());
+                }
+                else {
+                    resolve();
+                }
+            }
+            catch (err) {
+                reject(err);
+            }
         });
     }
     getData() {

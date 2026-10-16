@@ -92,6 +92,10 @@ export class ClusterHandler {
             this.cluster.manager.heartbeat?.ack(this.cluster.id, message.date);
             return;
         }
+        if (message._type === messageType.CLIENT_AUTORESHARDER_SENDDATA) {
+            this.cluster.manager.autoresharder?.getData(message.data);
+            return;
+        }
         if (message._type === messageType.CUSTOM_REPLY) {
             this.cluster.manager.promise.resolve(message as ResolveMessage);
             return;

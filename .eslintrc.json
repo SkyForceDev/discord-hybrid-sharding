@@ -33,6 +33,7 @@
         "no-negated-condition": 0,
         "class-methods-use-this": 0,
         "@typescript-eslint/no-shadow": 0,
-        "@typescript-eslint/prefer-nullish-coalescing": 0
+        "@typescript-eslint/prefer-nullish-coalescing": 0,
+        "@typescript-eslint/no-unsafe-declaration-merging": 0
     }
 }

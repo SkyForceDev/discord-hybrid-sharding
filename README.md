@@ -1,11 +1,11 @@
-<p align="center"><a href="https://nodei.co/npm/discord-hybrid-sharding/"><img src="https://nodei.co/npm/discord-hybrid-sharding.png"></a></p>
-<p align="center"><img src="https://img.shields.io/npm/v/discord-hybrid-sharding"> <img src="https://img.shields.io/npm/dm/discord-hybrid-sharding?label=downloads"> <img src="https://img.shields.io/npm/l/discord-hybrid-sharding"> <img src="https://img.shields.io/github/repo-size/meister03/discord-hybrid-sharding">  <a href="https://discord.gg/YTdNBHh"><img src="https://discordapp.com/api/guilds/697129454761410600/widget.png" alt="Discord server"/></a></p>
+<p align="center"><a href="https://nodei.co/npm/@skyforce/discord-hybrid-sharding/"><img src="https://nodei.co/npm/@skyforce/discord-hybrid-sharding.png"></a></p>
+<p align="center"><img src="https://img.shields.io/npm/v/@skyforce/discord-hybrid-sharding"> <img src="https://img.shields.io/npm/dm/@skyforce/discord-hybrid-sharding?label=downloads"> <img src="https://img.shields.io/npm/l/@skyforce/discord-hybrid-sharding"> <img src="https://img.shields.io/github/repo-size/SkyForceDev/discord-hybrid-sharding">  <a href="https://discord.gg/YTdNBHh"><img src="https://discordapp.com/api/guilds/697129454761410600/widget.png" alt="Discord server"/></a></p>
 
-# Discord-Hybrid-Sharding
+# @skyforce/discord-hybrid-sharding
 
-Scale your bot efficiently with hybrid sharding — combining process and internal sharding (m shards on n processes) for minimizing your resource usage.
+An actively maintained, production-hardened fork of `discord-hybrid-sharding` — combining process clustering and internal sharding ($m$ shards across $n$ processes) for maximum resource efficiency, distributed IPC resilience, Node.js 20/22+ BigInt support, and double-spawn race condition fixes.
 
-Battle-tested against bots managing up to 600k Guilds, reducing resource overhead (process idle usage) by 40-60% versus common sharding managers (discord.js). Works seamlessly with any Discord framework.
+Battle-tested against bots managing up to 600k Guilds, reducing resource overhead (process idle usage) by 40-60% versus common sharding managers (discord.js). Works seamlessly with modern Discord.js (v14/v15) and decoupled `@discordjs/ws` architectures.
 
 ### Featured by Discord Creators
 
@@ -17,6 +17,17 @@ Battle-tested against bots managing up to 600k Guilds, reducing resource overhea
 <img src="./assets/image.png" height="80" width="320">
 </a>
 </p>
+
+## Key Enhancements & Fork Fixes
+
+This fork is actively maintained by **SkyForceDev** to eliminate critical architectural deadlocks, memory leaks, and serialization bugs present in the original v3.0.1 package:
+
+- **IPC Promise Safety:** Enforces a default 30-second timeout on all IPC promises and automatically rejects pending promises with descriptive `Error` instances when a worker dies or exits (`rejectAllForCluster`). Prevents infinite hanging promises and master process memory leaks.
+- **Node.js 20/22+ BigInt IPC Serialization:** Defaults `child_process.fork()` serialization to `'advanced'` (V8 Structured Clone Algorithm), allowing native transport of Discord Snowflakes, `BigInt` permission bitfields, `Map`, and `Set` without throwing `TypeError: Do not know how to serialize a BigInt`.
+- **Respawn Concurrency Guards:** Protects `Cluster.respawn()` with an atomic concurrency guard (`isRespawning`) to block duplicate concurrent respawn calls. Aborts auto-respawn in `_handleExit` when an explicit respawn cycle is active, eliminating fatal `CLUSTER ALREADY SPAWNED` crashes.
+- **EventEmitter Leak Fixes:** Unconditionally removes temporary `ready` and `death` event listeners across all spawn resolution paths (`onReady`, `onDeath`, and `onTimeout`), completely eliminating `MaxListenersExceededWarning` memory leaks.
+- **Discord.js v14/v15 Gateway Decoupling:** Guards `ClusterClient.shards` and `ClusterClient.ids` to detect decoupled WebSocket architectures (`@discordjs/ws` `WebSocketManager`, `client.gateway.shards`) and falls back gracefully to `SHARD_LIST` rather than throwing fatal `TypeError`s on non-monolithic clients.
+- **Reliable Shard Calculation & Environment Parsing:** Migrated `fetchRecommendedShards` to native global `fetch()` with integer rounding (`Math.ceil`) to prevent fractional shard counts. Fixed `process.env.SHARD_LIST` parsing so unset or empty strings evaluate to `[]` instead of `[0]`.
 
 ## Why?
 
@@ -47,17 +58,21 @@ The system utilizes clusters or master shards, similar to regular shards in a sh
 
 ### 1. Installation
 
-```cli
-npm i discord-hybrid-sharding
+```bash
+npm install @skyforce/discord-hybrid-sharding
+# or
+pnpm add @skyforce/discord-hybrid-sharding
+# or
+yarn add @skyforce/discord-hybrid-sharding
 ```
 
 ### 2. Setup
 
-Create the cluster.js file, which will contain the ClusterManager for managing the processes/clusters.
+Create the `cluster.js` file, which will contain the `ClusterManager` for managing the processes/clusters.
 
 ```js
-// Typescript: import { ClusterManager } from 'discord-hybrid-sharding'
-const { ClusterManager } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterManager } from '@skyforce/discord-hybrid-sharding'
+const { ClusterManager } = require('@skyforce/discord-hybrid-sharding');
 
 const manager = new ClusterManager(`${__dirname}/bot.js`, {
     totalShards: 'auto', // or numeric shard count
@@ -75,8 +90,8 @@ manager.spawn({ timeout: -1 });
 Refactor your main `bot.js` file and provide the sharding parameters to your discord.js client.
 
 ```js
-// Typescript: import { ClusterClient, getInfo } from 'discord-hybrid-sharding'
-const { ClusterClient, getInfo } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterClient, getInfo } from '@skyforce/discord-hybrid-sharding'
+const { ClusterClient, getInfo } = require('@skyforce/discord-hybrid-sharding');
 const Discord = require('discord.js');
 
 const client = new Discord.Client({
@@ -219,8 +234,8 @@ There are two options for the `restartMode`:
 Cluster.js
 
 ```js
-// Typescript: import { ClusterManager, ReClusterManager  } from 'discord-hybrid-sharding'
-const { ClusterManager, ReClusterManager } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterManager, ReClusterManager } from '@skyforce/discord-hybrid-sharding'
+const { ClusterManager, ReClusterManager } = require('@skyforce/discord-hybrid-sharding');
 const manager = new ClusterManager(`${__dirname}/bot.js`, {...});
 
 manager.extend(
@@ -235,8 +250,8 @@ manager.recluster?.start({restartMode: 'gracefulSwitch', ...optional})
 Bot.js
 
 ```js
-// Typescript: import { ClusterClient, getInfo } from 'discord-hybrid-sharding'
-const { ClusterClient, getInfo } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterClient, getInfo } from '@skyforce/discord-hybrid-sharding'
+const { ClusterClient, getInfo } = require('@skyforce/discord-hybrid-sharding');
 const client = new Discord.Client(...)
 client.cluster = new ClusterClient(client);
 
@@ -263,8 +278,8 @@ client.login(token);
 -   Cluster will get respawned after the given amount of missed heartbeats has been reached
 
 ```js
-// Typescript: import { ClusterManager, HeartbeatManager  } from 'discord-hybrid-sharding'
-const { ClusterManager, HeartbeatManager } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterManager, HeartbeatManager } from '@skyforce/discord-hybrid-sharding'
+const { ClusterManager, HeartbeatManager } = require('@skyforce/discord-hybrid-sharding');
 const manager = new ClusterManager(`${__dirname}/bot.js`, {...});
 
 manager.extend(
@@ -285,8 +300,8 @@ manager.extend(
 > *Currently __not__ compatible with [discord-cross-hosting](https://npmjs.org/discord-cross-hosting).*
 
 ```js
-// Typescript: import { ClusterManager, AutoResharderManager  } from 'discord-hybrid-sharding'
-const { ClusterManager, AutoResharderManager } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterManager, AutoResharderManager } from '@skyforce/discord-hybrid-sharding'
+const { ClusterManager, AutoResharderManager } = require('@skyforce/discord-hybrid-sharding');
 const manager = new ClusterManager(`${__dirname}/bot.js`, {...});
 
 manager.extend(
@@ -317,7 +332,7 @@ manager.extend(
 
 And then on "every client" you need to add the Client:
 ```ts
-client.cluster = new ClusterManager(client);
+client.cluster = new ClusterClient(client);
 // you can bind it, but you don't have to bind it
 new AutoResharderClusterClient(client.cluster, {
     // OPTIONAL: Default is 60e3 which sends every minute the data / cluster
@@ -370,8 +385,8 @@ const manager = new ClusterManager(`${__dirname}/bot.js`, {
 ClusterManager | `cluster.js`
 
 ```js
-// Typescript: import { ClusterManager, messageType } from 'discord-hybrid-sharding'
-const { ClusterManager, messageType } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterManager, messageType } from '@skyforce/discord-hybrid-sharding'
+const { ClusterManager, messageType } = require('@skyforce/discord-hybrid-sharding');
 const manager = new ClusterManager(`${__dirname}/testbot.js`, {
     totalShards: 1,
     totalClusters: 1,
@@ -394,12 +409,12 @@ manager.spawn({ timeout: -1 });
 ClusterClient | `client.js`
 
 ```js
-// Typescript: import { ClusterClient, getInfo, messageType } from 'discord-hybrid-sharding'
-const { ClusterClient, getInfo, messageType } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterClient, getInfo, messageType } from '@skyforce/discord-hybrid-sharding'
+const { ClusterClient, getInfo, messageType } = require('@skyforce/discord-hybrid-sharding');
 const Discord = require('discord.js');
 const client = new Discord.Client({
     shards: getInfo().SHARD_LIST, // An array of shards that will get spawned
-    shardCount: getInfo().data.TOTAL_SHARDS, // Total number of shards
+    shardCount: getInfo().TOTAL_SHARDS, // Total number of shards
 });
 
 client.cluster = new ClusterClient(client);
@@ -482,8 +497,8 @@ Using the package with other libraries requires some minor changes:
 -   Your Bot.js file will have some additional code
 
 ```js
-// Typescript: import { ClusterClient, getInfo } from 'discord-hybrid-sharding'
-const { ClusterClient, getInfo } = require('discord-hybrid-sharding');
+// Typescript: import { ClusterClient, getInfo } from '@skyforce/discord-hybrid-sharding'
+const { ClusterClient, getInfo } = require('@skyforce/discord-hybrid-sharding');
 
 ///Create your Discord Client:
 /* Use the Data below for telling the Client, which shards to spawn */
@@ -505,8 +520,9 @@ With some minor changes, you can even use this Package for clustering normal pro
 
 # Bugs, Glitches and Issues
 
-If you encounter any problems feel free to open an issue in our <a href="https://github.com/meister03/discord-hybrid-sharding/issues">gitHub repository</a> or join the <a href="https://discord.gg/YTdNBHh">discord server</a>.
+If you encounter any problems feel free to open an issue in our <a href="https://github.com/SkyForceDev/discord-hybrid-sharding/issues">GitHub repository</a> or join the <a href="https://discord.gg/YTdNBHh">discord server</a>.
 
 # Credits
 
-Credits goes to the discord.js library for the base code (See `changes.md`) and to this helpful [server](https://discord.gg/BpeedKh)
+Maintained and developed by **SkyForceDev** ([SkyForce](https://github.com/SkyForceDev)).  
+Original library and architecture by [meister03](https://github.com/meister03) (`discord-hybrid-sharding`). Credits also go to the discord.js library for the base code (see `changes.md`) and community contributors.

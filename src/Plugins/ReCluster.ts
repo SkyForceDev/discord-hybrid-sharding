@@ -66,6 +66,17 @@ export class ReClusterManager {
 
         if (this.onProgress) throw new Error('Zero Downtime Reclustering is already in progress');
         if (!this.manager) throw new Error('Manager is missing on ReClusterManager');
+
+        process.emitWarning(
+            'ReCluster rolling/graceful restarts cause simultaneous Discord Gateway sessions for identical shard IDs. ' +
+            'Discord terminates duplicate sessions (Opcode 7 / 4000), triggering reconnect storms and duplicated event execution ' +
+            'unless a standalone Gateway layer (@discordjs/ws or Gateway proxy) is used.',
+            {
+                code: 'DISCORD_GATEWAY_SESSION_COLLISION_RISK',
+                detail: 'Running rolling reclustering with monolithic Gateway clients violates Discord single-session-per-shard constraints.',
+            },
+        );
+        this.manager._debug('[WARNING][ReClustering] Rolling/graceful restarts risk Discord Gateway session collisions and reconnect storms when using monolithic client gateway connections.');
         if (totalShards) {
             if (!this.manager?.token)
                 throw new Error('Token must be defined on manager, when totalShards is set on auto');

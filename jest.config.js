@@ -1,6 +1,19 @@
 module.exports = {
-    /*   preset: 'ts-jest', */
+    preset: 'ts-jest',
     testEnvironment: 'node',
-    testRegex: '(/dist/__tests__/.*|(\\.|/)(test|spec))\\.(js)$',
+    testMatch: ['<rootDir>/tests/**/*.test.ts'],
     moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+    moduleNameMapper: {
+        '^(\\.{1,2}/.*)\\.js$': '$1',
+    },
+    transform: {
+        '^.+\\.tsx?$': [
+            'ts-jest',
+            {
+                diagnostics: {
+                    ignoreCodes: [151002],
+                },
+            },
+        ],
+    },
 };

@@ -8,9 +8,10 @@ function getInfo() {
         throw new Error('NO CHILD/MASTER EXISTS OR SUPPLIED CLUSTER_MANAGER_MODE IS INCORRECT');
     let data;
     if (clusterMode === 'process') {
-        const shardList = [];
-        const parseShardList = process.env?.SHARD_LIST?.split(',') || [];
-        parseShardList.forEach(c => shardList.push(Number(c)));
+        const rawShardList = process.env?.SHARD_LIST?.trim();
+        const shardList = rawShardList && rawShardList.length > 0
+            ? rawShardList.split(',').filter(c => c.trim().length > 0).map(c => Number(c))
+            : [];
         data = {
             SHARD_LIST: shardList,
             TOTAL_SHARDS: Number(process.env.TOTAL_SHARDS),

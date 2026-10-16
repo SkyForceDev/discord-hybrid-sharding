@@ -152,7 +152,7 @@ exports.AutoResharderClusterClient = AutoResharderClusterClient;
 class AutoResharderManager {
     name;
     manager;
-    // private clustersListening = new Set<number>();
+    clustersListening = new Set();
     clusterDatas = [];
     options = {
         ShardsPerCluster: 'useManagerOption',
@@ -196,6 +196,10 @@ class AutoResharderManager {
         };
     }
     build(manager) {
+        process.emitWarning('AutoResharder is experimental and unmaintained. Dynamic resharding without standalone Gateway proxying (@discordjs/ws) can exceed Discord Gateway Identify rate limits and cause session invalidation.', {
+            code: 'AUTORESHARDER_DEPRECATION_WARNING',
+            detail: 'Consider migrating to an independent Gateway layer for large-scale shard scaling.',
+        });
         manager[this.name] = this;
         this.manager = manager;
         this.validate();
@@ -288,30 +292,25 @@ class AutoResharderManager {
     initialize() {
         if (!this.manager)
             throw new Error('Manager is missing on AutoResharderManager');
-        // try {
-        //     this.manager.on('clusterCreate', cluster => {
-        //         if (this.clustersListening.has(cluster.id)) {
-        //             return;
-        //         }
-        //         this.clustersListening.add(cluster.id);
-        //         cluster.on('message', message => {
-        //             if (typeof message !== 'object') return;
-        //             const msg = ('raw' in message ? message.raw : message) as sendDataMessage;
-        //             if (msg._type !== messageType.CLIENT_AUTORESHARDER_SENDDATA) return;
-        //             const index = this.clusterDatas.findIndex(v => v && v.v.clusterId === msg.data.clusterId);
-        //             if (index < 0) this.clusterDatas.push(msg.data);
-        //             else this.clusterDatas[index] = msg.data;
-        //             if (this.options.debug === true)
-        //                 console.debug(
-        //                     `MANAGER-AUTORESHARDER :: Reached sendData of Cluster #${cluster.id} for:`,
-        //                     msg.data,
-        //                 );
-        //             this.checkReCluster();
-        //         });
-        //     });
-        // } catch (e) {
-        //     console.error(e);
-        // }
+        try {
+            this.manager.on('clusterCreate', cluster => {
+                if (this.clustersListening.has(cluster.id)) {
+                    return;
+                }
+                this.clustersListening.add(cluster.id);
+                cluster.on('message', message => {
+                    if (typeof message !== 'object' || !message)
+                        return;
+                    const msg = ('raw' in message ? message.raw : message);
+                    if (msg._type !== __1.messageType.CLIENT_AUTORESHARDER_SENDDATA)
+                        return;
+                    this.getData(msg.data);
+                });
+            });
+        }
+        catch (e) {
+            console.error(e);
+        }
     }
     validate() {
         if (!this.manager)
